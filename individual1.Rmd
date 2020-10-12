@@ -1,0 +1,56 @@
+---
+title: "individual1.Rmd"
+author: "Caleb Purcell"
+date: "10/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+```
+
+## Importing Data
+```{r}
+defense <- read_excel('~/ds202_lab4/cyclonesFootball2019.xlsx', sheet='Defensive')
+offense <- read_excel('~/ds202_lab4/cyclonesFootball2019.xlsx', sheet='Offensive')
+biography <- read_excel('~/ds202_lab4/cyclonesFootball2019.xlsx', sheet='Biography')
+str(defense)
+```
+
+## Part 1: Cleaning Data
+```{r}
+#cleaning defense
+defClean = defense %>%
+  mutate(Name = as.factor(Name),
+         Opponent_Opponent = as.factor(Opponent_Opponent),
+         across(starts_with(c("Tackles", "Turnover", "Pass")), as.numeric))
+
+#cleaning offense
+offClean = offense %>%
+  mutate(Name = as.factor(Name),
+         Opponent_Opponent = as.factor(Opponent_Opponent),
+         across(starts_with(c("Rushing", "Receiving", "Passing")), as.numeric))
+
+#cleaning biography
+bioClean <- biography %>%
+  mutate(Weight = as.numeric(Weight)) %>%
+  separate(Height, c("feet","inches"), "-") %>%
+  mutate(Height = as.numeric(feet)* 12 + as.numeric(inches)) %>%
+  select(-feet, -inches)
+  
+str(defClean)
+str(offClean)
+str(bioClean)
+```
+
+## Part 2: Tidying
+
+## Part 3: Joining Data Frames
