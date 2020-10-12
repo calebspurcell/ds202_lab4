@@ -13,11 +13,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(readxl)
 library(dplyr)
+library(devtools)
 library(ggplot2)
 library(tidyr)
 ```
 
 ## Importing Data
+
 ```{r}
 defense <- read_excel('~/ds202_lab4/cyclonesFootball2019.xlsx', sheet='Defensive')
 offense <- read_excel('~/ds202_lab4/cyclonesFootball2019.xlsx', sheet='Offensive')
@@ -26,26 +28,30 @@ str(defense)
 ```
 
 ## Part 1: Cleaning Data
+
 ```{r}
-#cleaning defense
-defClean = defense %>%
+# cleaning defense
+defClean <- defense %>%
   mutate(Name = as.factor(Name),
          Opponent_Opponent = as.factor(Opponent_Opponent),
          across(starts_with(c("Tackles", "Turnover", "Pass")), as.numeric))
 
-#cleaning offense
-offClean = offense %>%
+# cleaning offense
+offClean <- offense %>%
   mutate(Name = as.factor(Name),
          Opponent_Opponent = as.factor(Opponent_Opponent),
          across(starts_with(c("Rushing", "Receiving", "Passing")), as.numeric))
 
-#cleaning biography
+# cleaning biography
 bioClean <- biography %>%
   mutate(Weight = as.numeric(Weight)) %>%
   separate(Height, c("feet","inches"), "-") %>%
   mutate(Height = as.numeric(feet)* 12 + as.numeric(inches)) %>%
   select(-feet, -inches)
-  
+```
+
+```{r}
+# printing structure of cleaned datasets
 str(defClean)
 str(offClean)
 str(bioClean)
@@ -53,4 +59,105 @@ str(bioClean)
 
 ## Part 2: Tidying
 
+**1. Reformat the defClean data frame into a tidy format using pivot_longer. The type of statistic (Tackles_Solo, Tackles_ASST, etc) is added as a new key column named stat.**
+
+```{r}
+defClean <- defClean %>%
+  pivot_longer(Tackles_Solo:Pass_PB, names_to = 'stat', values_to = 'score')
+defClean
+```
+
+**2. Compare the distributions of the defensive statistics. What defensive skills are rare?**
+
+```{r}
+ggplot(defClean, aes(x = reorder(stat, score), y = score)) + xlab('Defensive Skill') + ylab('Frequency') + ggtitle('Distribution of Defensive Skills') + geom_bar(stat = 'identity', fill='brown') + coord_flip()
+#create bar chart of Defensive Stats
+```
+
+    By looking at the distribution of defensive skills, we can see Turnover_INT, Turnover_FR, and Turnover_FF are the rarest defensive skills.
+    
+**3. Did ISU have better defense against Iowa or Notre Dame? Answer this question by creating a scatterplot with x- and y-axes being the number of solo tackles (of each player). A large number of solo tackles is an indicator of good defense.**
+
+```{r}
+soloTackles <- defClean %>%
+               filter(Opponent_Opponent == 'Iowa' | Opponent_Opponent == 'Notre Dame', stat == 'Tackles_Solo') %>%
+    pivot_wider(names_from = Opponent_Opponent, values_from = score)
+
+ggplot(soloTackles, aes(x=Iowa, y=`Notre Dame`)) + xlab('Solo Tackles vs Iowa') + ylab('Solo tackles vs Notre Dame') + ggtitle("Iowa Solo Tackles vs Notre Dame Solo Tackles") + geom_point()
+```
+
+    From this scatterplot, we can see there are more points at or above 2 for the Notre Dame game than the Iowa game.  This indicates ISU played better defense against Notre Dame.
+    
+**4. Separate the Hometown column into two columns, namely the city and the state. Print the first few rows of these two columns. (Hint: look at the sep= argument of separate)**
+
+```{r}
+bioClean <- bioClean %>%
+  separate(Hometown, c('City', 'State'), sep =", ")
+head(bioClean)
+```
+
+**5. How many players are there from each state?**
+
+```{r}
+bioClean %>%
+  group_by(State) %>%
+  summarize(num_players = n())
+```
+
 ## Part 3: Joining Data Frames
+
+**1. Find which states do the ISU defensive and offensive players come from. Create an appropriate summary.**
+
+```{r}
+# defensive players
+defNames <- as_tibble_col(unique(defClean$Name)) %>% rename(
+  Name = value)
+defStates <- left_join(x = defNames, y = bioClean, by = c('Name')) %>% select(State)
+defStates <- as_tibble_col(unique(defStates$State)) %>% rename(
+  State = value)
+
+# offensive players
+offNames <- as_tibble_col(unique(offClean$Name)) %>% rename(
+  Name = value)
+offStates <- left_join(x = offNames, y = bioClean, by = c('Name')) %>% select(State)
+offStates <- as_tibble_col(unique(offStates$State)) %>% rename(
+  State = value)
+
+Summary = NULL
+Summary$defStates <- defStates$State
+Summary$offStates <- append(offStates$State, '')
+as_tibble(Summary)
+```
+
+**2. How does the performance of quarterback Brock Purdy relate to the performance of the ISU team?**
+
+```{r}
+offClean$teamYards <- rowSums(offClean[,c("Rushing_YDS", "Receiving_YDS", "Passing_YDS")], na.rm=TRUE)
+
+offClean %>%
+  group_by(Name) %>%
+  summarize(avgTeamYards = mean(teamYards)) %>%
+  arrange(desc(avgTeamYards))
+```
+
+    From this numerical summary, we can easily see Brock Purdy averages the most offensive yards per game.  This makes sense because Purdy is handling the ball on every offensive play and gets credit for passing and rushing yards. The next highest performer is Breece Hall, which makes sense because he is the starting running back.
+
+**3. Which ISU player(s) made big progress over the last year? Compare the 2019 and the 2018 data.**
+
+```{r}
+offense2018 <- read_excel('~/ds202_lab4/cyclonesFootball2018.xlsx', sheet = "Offensive")
+
+offClean2018 <- offense2018 %>% mutate(Name = factor(Name)) %>% rename(Opponent = Opponent_Opponent) %>% mutate(Opponent = factor(Opponent)) %>% mutate_if(is.character, as.numeric) %>% pivot_wider(Name:Rushing_YDS, names_from = Opponent)
+
+yards2018 <- aggregate(Rushing_YDS ~ Name, data = offClean2018, FUN = sum)
+
+off19 <- offense %>% mutate(Name = factor(Name)) %>% rename(Opponent = Opponent_Opponent) %>% mutate(Opponent = factor(Opponent)) %>% mutate_if(is.character, as.numeric) %>% pivot_wider(Name:Rushing_YDS, names_from = Opponent)
+
+yards2019 <- aggregate(Rushing_YDS ~ Name, data = off19, FUN = sum)
+
+yearComparison <- yards2018 %>% inner_join(yards2019, by = c(Name = "Name")) %>% rename(yards2018 = Rushing_YDS.x, yards2019 = Rushing_YDS.y) %>% group_by(Name) %>% filter(yards2019 > yards2018)
+
+yearComparison
+```
+
+    To answer this question I wanted to see which player made the most improvement in rushing yards between 2018 and 2019.  To do this I took the sum of players' rushing yards from 2018 and compared it to players' rushing yards in 2019.  The player with the most improvement was Johnnie Lang, who increased his rushing yards by 159.
